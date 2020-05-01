@@ -4,6 +4,9 @@ use std::io::prelude::*;
 mod maths;
 use maths::*;
 
+fn deg_to_rad(degrees: f32) -> f32 {
+    degrees * std::f32::consts::PI / 180.0
+}
 #[derive(Copy, Clone)]
 struct Ray {
     origin: Vec3,
@@ -57,7 +60,6 @@ fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>) -> Vec3 {
     let t_min = 0.0;
     let t_max = 0.0;
 
-
     let mut closest: Option<HitRecord> = None;
 
     for object in objects {
@@ -78,7 +80,7 @@ fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>) -> Vec3 {
     }
 
     match closest {
-        Some(_) => Vec3::new(1.0, 0.0, 0.0),
+        Some(_) => (closest.unwrap().normal.unit() + Vec3::new(1.0, 1.0, 1.0)) * 0.5,
         None => {
             let unit_vec = ray.dir.unit();
             let t = 0.5 * (unit_vec.y + 1.0);
@@ -95,18 +97,18 @@ impl Hitable for Cube {
     }
 }
 
-struct Cercle {
+struct Circle {
     position: Vec3,
     radius: f32,
 }
 
-impl Cercle {
+impl Circle {
     fn new(position: Vec3, radius: f32) -> Self {
-        Cercle { position, radius }
+        Circle { position, radius }
     }
 }
 
-impl Hitable for Cercle {
+impl Hitable for Circle {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         let oc = ray.origin - self.position;
         let a = ray.dir.dot(ray.dir);
@@ -168,9 +170,9 @@ fn main() {
     let mut pixels: Vec<f32> = vec![];
 
     let mut objects: Vec<Box<dyn Hitable>> = Vec::new();
-    objects.push(Box::new(Cercle::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
-    objects.push(Box::new(Cercle::new(Vec3::new(-1.0, -1.0, -1.0), 0.5)));
-
+    objects.push(Box::new(Circle::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
+    objects.push(Box::new(Circle::new(Vec3::new(-1.0, -1.0, -1.0), 0.5)));
+    objects.push(Box::new(Circle::new(Vec3::new(0.0, -100.5, -1.0), 100.0)));
 
     for j in 0..image_height {
         for i in 0..image_width {
