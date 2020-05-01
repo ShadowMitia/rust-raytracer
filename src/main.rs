@@ -4,10 +4,41 @@ use std::io::prelude::*;
 mod maths;
 use maths::*;
 
+use rand::prelude::*;
+
+fn random_in_unit_sphere() -> Vec3 {
+    let a = random_between(0.0, 2.0 * std::f32::consts::PI);
+    let z = random_between(-1.0, 1.0);
+    let r = f32::sqrt(1.0 - z * z);
+
+    Vec3::new(r * f32::cos(a), r * f32::sin(a), z)
+}
+
+fn random_01() -> f32 {
+    let mut rng = rand::thread_rng();
+    rng.gen()
+}
+
+fn random_between(min: f32, max: f32) -> f32 {
+    let mut rng = rand::thread_rng();
+    rng.gen_range(min, max)
+}
+
 fn deg_to_rad(degrees: f32) -> f32 {
     degrees * std::f32::consts::PI / 180.0
 }
-#[derive(Copy, Clone)]
+
+fn clamp(x: f32, min: f32, max: f32) -> f32 {
+    if x < min {
+        min
+    } else if x > max {
+        max
+    } else {
+        x
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 struct Ray {
     origin: Vec3,
     dir: Vec3,
@@ -19,7 +50,7 @@ impl Ray {
     }
 
     fn at(self, t: f32) -> Vec3 {
-        self.origin.add(self.dir.mult_float(t))
+        self.origin + self.dir * t
     }
 }
 
@@ -54,11 +85,19 @@ impl SimpleCamera {
     fn get(self, u: f32, v: f32) -> Vec3 {
         self.lower_left + self.horizontal * u + self.vertical * v
     }
+
+    fn get_ray(self, u: f32, v: f32) -> Ray {
+        Ray::new(self.origin, self.get(u, v) - self.origin)
+    }
 }
 
-fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>) -> Vec3 {
+fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>, depth: i32) -> Vec3 {
     let t_min = 0.0;
     let t_max = 0.0;
+
+    if depth <= 0 {
+        return Vec3::new(0.0, 0.0, 0.0);
+    }
 
     let mut closest: Option<HitRecord> = None;
 
@@ -79,14 +118,24 @@ fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>) -> Vec3 {
         }
     }
 
-    match closest {
-        Some(_) => (closest.unwrap().normal.unit() + Vec3::new(1.0, 1.0, 1.0)) * 0.5,
+    let color = match closest {
+        Some(_) => {
+            let hit_info = closest.unwrap();
+            let target = hit_info.position + hit_info.normal + random_in_unit_sphere();
+            ray_color(
+                &Ray::new(hit_info.position, target - hit_info.position),
+                &objects,
+                depth - 1,
+            ) * 0.5
+        }
         None => {
             let unit_vec = ray.dir.unit();
             let t = 0.5 * (unit_vec.y + 1.0);
             Vec3::new(1.0, 1.0, 1.0) * (1.0 - t) + Vec3::new(0.5, 0.7, 1.0) * t
         }
-    }
+    };
+
+    color
 }
 
 struct Cube {}
@@ -122,6 +171,10 @@ impl Hitable for Circle {
         } else {
             // TODO: send both result of quadratic equation?
             let t = (-b - f32::sqrt(discriminant)) / (2.0 * a);
+
+            if t < 0.1 {
+                return None;
+            }
 
             let N = ray.at(t) - self.position;
 
@@ -160,6 +213,10 @@ fn main() {
     let image_width = 200;
     let image_height = 100;
 
+    let samples_per_pixel = 100;
+
+    let max_depth = 50;
+
     let camera = SimpleCamera::new(
         Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(-2.0, -1.0, -1.0),
@@ -176,25 +233,31 @@ fn main() {
 
     for j in 0..image_height {
         for i in 0..image_width {
-            let u: f32 = i as f32 / image_width as f32;
-            let v: f32 = (image_height - 1 - j) as f32 / image_height as f32;
+            let mut color = Vec3::new(0.0, 0.0, 0.0);
+            for _ in 0..samples_per_pixel {
+                let u: f32 = ((i as f32) + random_01()) / image_width as f32;
+                let v: f32 = (((image_height - 1 - j) as f32) + random_01()) / image_height as f32;
 
-            let ray = Ray::new(camera.origin, camera.get(u, v));
+                let ray = camera.get_ray(u, v);
 
-            let color = ray_color(&ray, &objects);
+                color += ray_color(&ray, &objects, max_depth);
+            }
+
+            color = color / (samples_per_pixel as f32);
 
             pixels.push(color.x);
             pixels.push(color.y);
             pixels.push(color.z);
-
-            // color gradient
-            // pixels.push(u);
-            // pixels.push(v);
-            // pixels.push(0.2);
         }
     }
 
-    let output_pixels = pixels.iter().map(|x| (255.9 * x) as u8).collect();
+    let output_pixels: Vec<u8> = pixels
+        .iter()
+        .map(|&x| f32::sqrt(x))
+        .map(|x| clamp(x, 0.0, 0.9999))
+        .map(|x| (255.9 * x))
+        .map(|x| x as u8)
+        .collect();
 
     println!("Generating image!");
     let _res = create_ppm("normal.ppm", &output_pixels, image_width, image_height);

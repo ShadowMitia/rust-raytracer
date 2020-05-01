@@ -1,10 +1,10 @@
 use std::ops::Add;
-use std::ops::Mul;
+use std::ops::AddAssign;
 use std::ops::Div;
-use std::ops::Sub;
+use std::ops::Mul;
 use std::ops::Neg;
-
-#[derive(Copy, Clone)]
+use std::ops::Sub;
+#[derive(Copy, Clone, Debug)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,
@@ -90,6 +90,12 @@ impl Add for Vec3 {
 
     fn add(self, other: Vec3) -> Vec3 {
         self.add(other)
+    }
+}
+
+impl AddAssign for Vec3 {
+    fn add_assign(&mut self, rhs: Vec3) {
+        *self = self.add(rhs);
     }
 }
 
