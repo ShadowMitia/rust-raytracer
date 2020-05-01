@@ -53,17 +53,46 @@ impl SimpleCamera {
     }
 }
 
-fn ray_color(ray: &Ray) -> Vec3 {
-    let cercle = Cercle::new(Vec3::new(0.0, 0.0, -1.0), 0.5);
+fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>) -> Vec3 {
+    let t_min = 0.0;
+    let t_max = 0.0;
 
-    let t =  hit_sphere(&cercle, &ray);
-    if t > 0.0 {
-        return ((ray.at(t) - cercle.position).unit() + Vec3::new(1.0, 1.0, 1.0)) * 0.5;
+
+    let mut closest: Option<HitRecord> = None;
+
+    for object in objects {
+        match object.hit(&ray, t_min, t_max) {
+            Some(record) => {
+                let close = closest.unwrap_or(HitRecord::new(
+                    Vec3::new(0.0, 0.0, 0.0),
+                    Vec3::new(0.0, 0.0, 0.0),
+                    std::f32::INFINITY,
+                    false,
+                ));
+                if record.t < close.t {
+                    closest = Some(record.clone());
+                }
+            }
+            None => continue,
+        }
     }
 
-    let unit_vec = ray.dir.unit();
-    let t = 0.5 * (unit_vec.y + 1.0);
-    Vec3::new(1.0, 1.0, 1.0) * (1.0 - t) + Vec3::new(0.5, 0.7, 1.0) * t
+    match closest {
+        Some(_) => Vec3::new(1.0, 0.0, 0.0),
+        None => {
+            let unit_vec = ray.dir.unit();
+            let t = 0.5 * (unit_vec.y + 1.0);
+            Vec3::new(1.0, 1.0, 1.0) * (1.0 - t) + Vec3::new(0.5, 0.7, 1.0) * t
+        }
+    }
+}
+
+struct Cube {}
+
+impl Hitable for Cube {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        None
+    }
 }
 
 struct Cercle {
@@ -77,21 +106,50 @@ impl Cercle {
     }
 }
 
-fn hit_sphere(cercle: &Cercle, ray: &Ray) -> f32 {
-    let oc = ray.origin - cercle.position;
-    let a = ray.dir.dot(ray.dir);
-    let b = 2.0 * oc.dot(ray.dir);
-    let c = oc.dot(oc) - cercle.radius * cercle.radius;
+impl Hitable for Cercle {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        let oc = ray.origin - self.position;
+        let a = ray.dir.dot(ray.dir);
+        let b = 2.0 * oc.dot(ray.dir);
+        let c = oc.dot(oc) - self.radius * self.radius;
 
-    let discriminant = b * b - 4.0 * a * c;
-    
-    if discriminant < 0.0 {
-        -1.0
-    } else {
-        // TODO: send both result of quadratic equation?
-        (-b - f32::sqrt(discriminant)) / (2.0 * a)
+        let discriminant = b * b - 4.0 * a * c;
+
+        if discriminant < 0.0 {
+            None
+        } else {
+            // TODO: send both result of quadratic equation?
+            let t = (-b - f32::sqrt(discriminant)) / (2.0 * a);
+
+            let N = ray.at(t) - self.position;
+
+            Some(HitRecord::new(ray.at(t), N, t, ray.dir.dot(N) < 0.0))
+        }
     }
+}
 
+#[derive(Copy, Clone)]
+struct HitRecord {
+    position: Vec3,
+    normal: Vec3,
+    t: f32,
+    front_face: bool,
+}
+
+impl HitRecord {
+    fn new(position: Vec3, normal: Vec3, t: f32, front_face: bool) -> Self {
+        let normal = if front_face { normal } else { -normal };
+
+        HitRecord {
+            position,
+            normal,
+            t,
+            front_face,
+        }
+    }
+}
+trait Hitable {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
 
 fn main() {
@@ -109,6 +167,11 @@ fn main() {
 
     let mut pixels: Vec<f32> = vec![];
 
+    let mut objects: Vec<Box<dyn Hitable>> = Vec::new();
+    objects.push(Box::new(Cercle::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
+    objects.push(Box::new(Cercle::new(Vec3::new(-1.0, -1.0, -1.0), 0.5)));
+
+
     for j in 0..image_height {
         for i in 0..image_width {
             let u: f32 = i as f32 / image_width as f32;
@@ -116,7 +179,7 @@ fn main() {
 
             let ray = Ray::new(camera.origin, camera.get(u, v));
 
-            let color = ray_color(&ray);
+            let color = ray_color(&ray, &objects);
 
             pixels.push(color.x);
             pixels.push(color.y);
@@ -132,11 +195,6 @@ fn main() {
     let output_pixels = pixels.iter().map(|x| (255.9 * x) as u8).collect();
 
     println!("Generating image!");
-    let _res = create_ppm(
-        "normal.ppm",
-        &output_pixels,
-        image_width,
-        image_height,
-    );
+    let _res = create_ppm("normal.ppm", &output_pixels, image_width, image_height);
     println!("Done!")
 }
