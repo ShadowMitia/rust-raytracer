@@ -4,6 +4,7 @@ use std::io::prelude::*;
 mod maths;
 use maths::*;
 
+#[derive(Copy, Clone)]
 struct Ray {
     origin: Vec3,
     dir: Vec3,
@@ -55,8 +56,9 @@ impl SimpleCamera {
 fn ray_color(ray: &Ray) -> Vec3 {
     let cercle = Cercle::new(Vec3::new(0.0, 0.0, -1.0), 0.5);
 
-    if hit_sphere(&cercle, &ray) {
-        return Vec3::new(1.0, 0.0, 0.0);
+    let t =  hit_sphere(&cercle, &ray);
+    if t > 0.0 {
+        return ((ray.at(t) - cercle.position).unit() + Vec3::new(1.0, 1.0, 1.0)) * 0.5;
     }
 
     let unit_vec = ray.dir.unit();
@@ -75,15 +77,21 @@ impl Cercle {
     }
 }
 
-fn hit_sphere(cercle: &Cercle, ray: &Ray) -> bool {
-    let oc = cercle.position - ray.origin;
+fn hit_sphere(cercle: &Cercle, ray: &Ray) -> f32 {
+    let oc = ray.origin - cercle.position;
     let a = ray.dir.dot(ray.dir);
     let b = 2.0 * oc.dot(ray.dir);
     let c = oc.dot(oc) - cercle.radius * cercle.radius;
 
     let discriminant = b * b - 4.0 * a * c;
+    
+    if discriminant < 0.0 {
+        -1.0
+    } else {
+        // TODO: send both result of quadratic equation?
+        (-b - f32::sqrt(discriminant)) / (2.0 * a)
+    }
 
-    discriminant > 0.0
 }
 
 fn main() {
@@ -125,7 +133,7 @@ fn main() {
 
     println!("Generating image!");
     let _res = create_ppm(
-        "sky_gradient.ppm",
+        "normal.ppm",
         &output_pixels,
         image_width,
         image_height,
