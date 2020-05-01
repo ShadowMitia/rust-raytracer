@@ -1,0 +1,12 @@
+* Raytracer made in Rust
+
+This raytracer is based on the on the [[https://raytracing.github.io/][Rust in one weekend book]] but done in Rust.
+
+
+* Build and run
+
+Just install Rust and then from the root of the project:
+
+#+begin_src sh
+cargo run
+#+end_src
