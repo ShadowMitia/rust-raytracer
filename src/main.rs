@@ -10,6 +10,19 @@ fn reflect(v: Vec3, n: Vec3) -> Vec3 {
     v - v.dot(n) * n * 2.0
 }
 
+fn refract(uv: Vec3, n: Vec3, etai_over_etat: f64) -> Vec3 {
+    let cos_theta = (-uv).dot(n);
+    let r_out_parallel = etai_over_etat * (uv + cos_theta * n);
+    let r_out_perp = -f64::sqrt(1.0 - r_out_parallel.length_squared()) * n;
+    r_out_parallel + r_out_perp
+}
+
+fn schlick(cosine: f64, ref_idx: f64) -> f64 {
+    let mut r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+    r0 = r0 * r0;
+    r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)
+}
+
 #[derive(Copy, Clone, Debug)]
 struct Ray {
     origin: Vec3,
@@ -160,6 +173,7 @@ impl Hitable for Sphere {
 enum MaterialType {
     Lambertian { albedo: Vec3 },
     Metal { albedo: Vec3, fuzziness: f64 },
+    Dialectric { refractive_index: f64 },
 }
 
 #[derive(Clone, Copy)]
@@ -213,6 +227,35 @@ impl Material for MaterialType {
                     None
                 }
             }
+            MaterialType::Dialectric { refractive_index } => {
+                let attenuation = Vec3::new(1.0, 1.0, 1.0);
+                let etai_over_etat = if rec.front_face {
+                    1.0 / refractive_index
+                } else {
+                    *refractive_index
+                };
+
+                let unit_direction = ray.dir.unit();
+                let cos_theta = f64::min(-unit_direction.dot(rec.normal), 1.0);
+                let sin_theta = f64::sqrt(1.0 - cos_theta * cos_theta);
+
+                if etai_over_etat * sin_theta > 1.0 {
+                    let reflected = reflect(unit_direction, rec.normal);
+                    let scattered = Ray::new(rec.position, reflected);
+                    return Some((attenuation, scattered));
+                }
+
+                let reflect_prob = schlick(cos_theta, etai_over_etat);
+                if random_01() < reflect_prob {
+                    let reflected = reflect(unit_direction, rec.normal);
+                    let scattered = Ray::new(rec.position, reflected);
+                    return Some((attenuation, scattered));
+                }
+
+                let refracted = refract(unit_direction, rec.normal, etai_over_etat);
+                let scattered = Ray::new(rec.position, refracted);
+                Some((attenuation, scattered))
+            }
         }
     }
 }
@@ -260,9 +303,15 @@ fn main() {
     objects.push(Box::new(Sphere::new(
         Vec3::new(-1.0, 0.0, -1.0),
         0.5,
-        MaterialType::Metal {
-            albedo: Vec3::new(0.8, 0.8, 0.8),
-            fuzziness: 0.3,
+        MaterialType::Dialectric {
+            refractive_index: 1.5,
+        },
+    )));
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(-1.0, 0.0, -1.0),
+        -0.45,
+        MaterialType::Dialectric {
+            refractive_index: 1.5,
         },
     )));
 
