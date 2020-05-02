@@ -6,13 +6,13 @@ use std::ops::Neg;
 use std::ops::Sub;
 #[derive(Copy, Clone, Debug)]
 pub struct Vec3 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 impl Vec3 {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
         Vec3 { x, y, z }
     }
 
@@ -32,8 +32,8 @@ impl Vec3 {
         }
     }
 
-    pub fn length(self) -> f32 {
-        f32::sqrt(self.length_squared())
+    pub fn length(self) -> f64 {
+        f64::sqrt(self.length_squared())
     }
 
     pub fn neg(self) -> Self {
@@ -44,11 +44,11 @@ impl Vec3 {
         }
     }
 
-    pub fn length_squared(self) -> f32 {
+    pub fn length_squared(self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    pub fn div(self, t: f32) -> Self {
+    pub fn div(self, t: f64) -> Self {
         self.mult_float(1.0 / t)
     }
 
@@ -60,7 +60,7 @@ impl Vec3 {
         }
     }
 
-    pub fn mult_float(self, t: f32) -> Self {
+    pub fn mult_float(self, t: f64) -> Self {
         Vec3 {
             x: self.x * t,
             y: self.y * t,
@@ -68,7 +68,7 @@ impl Vec3 {
         }
     }
 
-    pub fn dot(self, vec: Vec3) -> f32 {
+    pub fn dot(self, vec: Vec3) -> f64 {
         self.x * vec.x + self.y * vec.y + self.z * vec.z
     }
 
@@ -107,19 +107,18 @@ impl Mul for Vec3 {
     }
 }
 
-impl Mul<f32> for Vec3 {
+impl Mul<f64> for Vec3 {
     type Output = Vec3;
 
-    fn mul(self, other: f32) -> Vec3 {
+    fn mul(self, other: f64) -> Vec3 {
         self.mult_float(other)
     }
 }
 
-impl Mul<Vec3> for f32 {
+impl Mul<Vec3> for f64 {
     type Output = Vec3;
-
-    fn mul(self, other: Vec3) -> Vec3 {
-        other.mult_float(self)
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        rhs.mult_float(self)
     }
 }
 
@@ -131,10 +130,10 @@ impl Sub for Vec3 {
     }
 }
 
-impl Div<f32> for Vec3 {
+impl Div<f64> for Vec3 {
     type Output = Vec3;
 
-    fn div(self, other: f32) -> Vec3 {
+    fn div(self, other: f64) -> Vec3 {
         self.div(other)
     }
 }
