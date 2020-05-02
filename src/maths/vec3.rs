@@ -115,6 +115,14 @@ impl Mul<f32> for Vec3 {
     }
 }
 
+impl Mul<Vec3> for f32 {
+    type Output = Vec3;
+
+    fn mul(self, other: Vec3) -> Vec3 {
+        other.mult_float(self)
+    }
+}
+
 impl Sub for Vec3 {
     type Output = Vec3;
 
