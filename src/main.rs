@@ -22,7 +22,6 @@ impl Ray {
     }
 }
 
-
 #[derive(Copy, Clone)]
 struct SimpleCamera {
     origin: Vec3,
@@ -51,8 +50,8 @@ impl SimpleCamera {
 }
 
 fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>, depth: i32) -> Vec3 {
-    let t_min = 0.0;
-    let t_max = 0.0;
+    let t_min = 0.0001;
+    let t_max = std::f32::INFINITY;
 
     if depth <= 0 {
         return Vec3::new(0.0, 0.0, 0.0);
@@ -129,9 +128,18 @@ impl Hitable for Circle {
             None
         } else {
             // TODO: send both result of quadratic equation?
-            let t = (-b - f32::sqrt(discriminant)) / (2.0 * a);
+            let t1 = (-b - f32::sqrt(discriminant)) / (2.0 * a);
+            let t2 = (-b + f32::sqrt(discriminant)) / (2.0 * a);
 
-            if t < 0.1 {
+            // let t = match (t1,t2) {
+            //     (t1,_) if t1 < t_max && t1 > t_min => t1,
+            //     (_, t2) if t2 < t_max && t2 > t_min => t2,
+            //     _ => return None
+            // };
+
+            let t = t1;
+
+            if t < t_min || t > t_max {
                 return None;
             }
 
@@ -190,7 +198,7 @@ fn main() {
 
     let mut objects: Vec<Box<dyn Hitable>> = Vec::new();
     objects.push(Box::new(Circle::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
-    objects.push(Box::new(Circle::new(Vec3::new(-1.0, -1.0, -1.0), 0.5)));
+    objects.push(Box::new(Circle::new(Vec3::new(-2.0, 0.0, -2.0), 0.5)));
     objects.push(Box::new(Circle::new(Vec3::new(0.0, -100.5, -1.0), 100.0)));
 
     println!("Start rendering");
@@ -231,8 +239,5 @@ fn main() {
         .map(|x| x as u8)
         .collect();
 
-
     let _res = create_ppm("result.ppm", &output_pixels, image_width, image_height);
-
-
 }
