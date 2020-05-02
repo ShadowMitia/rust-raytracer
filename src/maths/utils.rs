@@ -1,4 +1,3 @@
-
 use rand::prelude::*;
 
 use crate::maths::vec3::*;
@@ -9,6 +8,15 @@ pub fn random_in_unit_sphere() -> Vec3 {
     let r = f32::sqrt(1.0 - z * z);
 
     Vec3::new(r * f32::cos(a), r * f32::sin(a), z)
+}
+
+pub fn random_in_hemisphere(normal: Vec3) -> Vec3 {
+    let in_unit_sphere = random_in_unit_sphere();
+    if in_unit_sphere.dot(normal) > 0.0 {
+        return in_unit_sphere;
+    } else {
+        return -in_unit_sphere;
+    }
 }
 
 pub fn random_01() -> f32 {

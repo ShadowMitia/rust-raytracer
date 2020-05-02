@@ -50,7 +50,7 @@ impl SimpleCamera {
 }
 
 fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>, depth: i32) -> Vec3 {
-    let t_min = 0.0001;
+    let t_min = 0.001;
     let t_max = std::f32::INFINITY;
 
     if depth <= 0 {
@@ -79,7 +79,7 @@ fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>, depth: i32) -> Vec3 {
     let color = match closest {
         Some(_) => {
             let hit_info = closest.unwrap();
-            let target = hit_info.position + hit_info.normal + random_in_unit_sphere();
+            let target = hit_info.position + random_in_hemisphere(hit_info.normal);
             ray_color(
                 &Ray::new(hit_info.position, target - hit_info.position),
                 &objects,
@@ -128,20 +128,17 @@ impl Hitable for Circle {
             None
         } else {
             // TODO: send both result of quadratic equation?
-            let t1 = (-b - f32::sqrt(discriminant)) / (2.0 * a);
-            let t2 = (-b + f32::sqrt(discriminant)) / (2.0 * a);
+            let root = f32::sqrt(discriminant);
+            let t1 = (-b - root) / (2.0 * a);
+            let t2 = (-b + root) / (2.0 * a);
 
-            // let t = match (t1,t2) {
-            //     (t1,_) if t1 < t_max && t1 > t_min => t1,
-            //     (_, t2) if t2 < t_max && t2 > t_min => t2,
-            //     _ => return None
-            // };
-
-            let t = t1;
-
-            if t < t_min || t > t_max {
+            let t = if t1 < t_max && t1 > t_min {
+                t1
+            } else if t2 < t_max && t2 > t_min {
+                t2
+            } else {
                 return None;
-            }
+            };
 
             let normal = ray.at(t) - self.position;
 
