@@ -1,42 +1,10 @@
-use std::fs::File;
-use std::io::prelude::*;
-
 mod maths;
 use maths::*;
 
-use rand::prelude::*;
+mod netpbm;
+use netpbm::*;
 
-fn random_in_unit_sphere() -> Vec3 {
-    let a = random_between(0.0, 2.0 * std::f32::consts::PI);
-    let z = random_between(-1.0, 1.0);
-    let r = f32::sqrt(1.0 - z * z);
-
-    Vec3::new(r * f32::cos(a), r * f32::sin(a), z)
-}
-
-fn random_01() -> f32 {
-    let mut rng = rand::thread_rng();
-    rng.gen()
-}
-
-fn random_between(min: f32, max: f32) -> f32 {
-    let mut rng = rand::thread_rng();
-    rng.gen_range(min, max)
-}
-
-fn deg_to_rad(degrees: f32) -> f32 {
-    degrees * std::f32::consts::PI / 180.0
-}
-
-fn clamp(x: f32, min: f32, max: f32) -> f32 {
-    if x < min {
-        min
-    } else if x > max {
-        max
-    } else {
-        x
-    }
-}
+use std::time::Instant;
 
 #[derive(Copy, Clone, Debug)]
 struct Ray {
@@ -54,15 +22,6 @@ impl Ray {
     }
 }
 
-fn create_ppm(name: &str, pixels: &Vec<u8>, width: u32, height: u32) -> std::io::Result<()> {
-    let header = format!("{}\n{} {}\n{}\n", "P6", width, height, 255);
-
-    let mut file = File::create(name)?;
-    file.write_all(header.as_bytes())?;
-    file.write_all(pixels)?;
-
-    Ok(())
-}
 
 #[derive(Copy, Clone)]
 struct SimpleCamera {
@@ -176,9 +135,14 @@ impl Hitable for Circle {
                 return None;
             }
 
-            let N = ray.at(t) - self.position;
+            let normal = ray.at(t) - self.position;
 
-            Some(HitRecord::new(ray.at(t), N, t, ray.dir.dot(N) < 0.0))
+            Some(HitRecord::new(
+                ray.at(t),
+                normal,
+                t,
+                ray.dir.dot(normal) < 0.0,
+            ))
         }
     }
 }
@@ -212,9 +176,7 @@ fn main() {
 
     let image_width = 200;
     let image_height = 100;
-
     let samples_per_pixel = 100;
-
     let max_depth = 50;
 
     let camera = SimpleCamera::new(
@@ -230,6 +192,9 @@ fn main() {
     objects.push(Box::new(Circle::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
     objects.push(Box::new(Circle::new(Vec3::new(-1.0, -1.0, -1.0), 0.5)));
     objects.push(Box::new(Circle::new(Vec3::new(0.0, -100.5, -1.0), 100.0)));
+
+    println!("Start rendering");
+    let start_time = Instant::now();
 
     for j in 0..image_height {
         for i in 0..image_width {
@@ -251,15 +216,23 @@ fn main() {
         }
     }
 
+    println!("Done! ({:?})", start_time.elapsed());
+
+    println!("Generating image!");
+
     let output_pixels: Vec<u8> = pixels
         .iter()
+        // Do gamma correction
         .map(|&x| f32::sqrt(x))
+        // Clamp values between 0 and 1
         .map(|x| clamp(x, 0.0, 0.9999))
+        // Convert to 0 -> 256 range
         .map(|x| (255.9 * x))
         .map(|x| x as u8)
         .collect();
 
-    println!("Generating image!");
-    let _res = create_ppm("normal.ppm", &output_pixels, image_width, image_height);
-    println!("Done!")
+
+    let _res = create_ppm("result.ppm", &output_pixels, image_width, image_height);
+
+
 }
