@@ -99,7 +99,7 @@ impl AddAssign for Vec3 {
     }
 }
 
-impl Mul for Vec3 {
+impl Mul<Vec3> for Vec3 {
     type Output = Vec3;
 
     fn mul(self, other: Vec3) -> Vec3 {
@@ -117,7 +117,7 @@ impl Mul<f64> for Vec3 {
 
 impl Mul<Vec3> for f64 {
     type Output = Vec3;
-    fn mul(self, rhs: Vec3) -> Self::Output {
+    fn mul(self, rhs: Vec3) -> Vec3 {
         rhs.mult_float(self)
     }
 }

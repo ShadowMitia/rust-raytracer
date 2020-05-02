@@ -6,6 +6,10 @@ use netpbm::*;
 
 use std::time::Instant;
 
+fn reflect(v: Vec3, n: Vec3) -> Vec3 {
+    v - v.dot(n) * n * 2.0
+}
+
 #[derive(Copy, Clone, Debug)]
 struct Ray {
     origin: Vec3,
@@ -17,7 +21,7 @@ impl Ray {
         Ray { origin, dir }
     }
 
-    fn at(self, t: f32) -> Vec3 {
+    fn at(self, t: f64) -> Vec3 {
         self.origin + self.dir * t
     }
 }
@@ -40,83 +44,82 @@ impl SimpleCamera {
         }
     }
 
-    fn get(self, u: f32, v: f32) -> Vec3 {
+    fn get(self, u: f64, v: f64) -> Vec3 {
         self.lower_left + self.horizontal * u + self.vertical * v
     }
 
-    fn get_ray(self, u: f32, v: f32) -> Ray {
+    fn get_ray(self, u: f64, v: f64) -> Ray {
         Ray::new(self.origin, self.get(u, v) - self.origin)
     }
 }
 
-fn ray_color(ray: &Ray, objects: &Vec<Box<dyn Hitable>>, depth: i32) -> Vec3 {
+fn ray_color(ray: &Ray, objects: &[Box<dyn Hitable>], depth: i32) -> Vec3 {
     let t_min = 0.001;
-    let t_max = std::f32::INFINITY;
+    let t_max = std::f64::INFINITY;
 
     if depth <= 0 {
         return Vec3::new(0.0, 0.0, 0.0);
     }
 
-    let mut closest: Option<HitRecord> = None;
+    let mut closest: HitRecord = HitRecord::new(
+        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(0.0, 0.0, 0.0),
+        std::f64::INFINITY,
+        false,
+        MaterialType::Lambertian {
+            albedo: Vec3::new(1.0, 0.0, 1.0),
+        },
+    );
 
     for object in objects {
         match object.hit(&ray, t_min, t_max) {
             Some(record) => {
-                let close = closest.unwrap_or(HitRecord::new(
-                    Vec3::new(0.0, 0.0, 0.0),
-                    Vec3::new(0.0, 0.0, 0.0),
-                    std::f32::INFINITY,
-                    false,
-                ));
+                let close = closest;
                 if record.t < close.t {
-                    closest = Some(record.clone());
+                    closest = record;
                 }
             }
             None => continue,
         }
     }
 
-    let color = match closest {
-        Some(_) => {
-            let hit_info = closest.unwrap();
-            let target = hit_info.position + random_in_hemisphere(hit_info.normal);
-            ray_color(
-                &Ray::new(hit_info.position, target - hit_info.position),
-                &objects,
-                depth - 1,
-            ) * 0.5
+    let hit_info = closest;
+
+    if hit_info.t < std::f64::INFINITY {
+        let scatter_res = hit_info.material.scatter(ray, &hit_info);
+
+        match scatter_res {
+            Some((attenuation, scattered)) => {
+                return attenuation * ray_color(&scattered, objects, depth - 1)
+            }
+            None => return Vec3::new(0.0, 0.0, 0.0),
         }
-        None => {
-            let unit_vec = ray.dir.unit();
-            let t = 0.5 * (unit_vec.y + 1.0);
-            Vec3::new(1.0, 1.0, 1.0) * (1.0 - t) + Vec3::new(0.5, 0.7, 1.0) * t
-        }
-    };
-
-    color
-}
-
-struct Cube {}
-
-impl Hitable for Cube {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        None
     }
+
+    let unit_vec = ray.dir.unit();
+    let t = 0.5 * (unit_vec.y + 1.0);
+    Vec3::new(1.0, 1.0, 1.0) * (1.0 - t) + Vec3::new(0.5, 0.7, 1.0) * t
 }
 
-struct Circle {
+struct Sphere {
     position: Vec3,
-    radius: f32,
+    radius: f64,
+
+    material: MaterialType,
 }
 
-impl Circle {
-    fn new(position: Vec3, radius: f32) -> Self {
-        Circle { position, radius }
+impl Sphere {
+    fn new(position: Vec3, radius: f64, material: MaterialType) -> Self {
+        Sphere {
+            position,
+            radius,
+            material,
+        }
     }
 }
 
-impl Hitable for Circle {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+impl Hitable for Sphere {
+    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let oc = ray.origin - self.position;
         let a = ray.dir.dot(ray.dir);
         let b = 2.0 * oc.dot(ray.dir);
@@ -128,7 +131,7 @@ impl Hitable for Circle {
             None
         } else {
             // TODO: send both result of quadratic equation?
-            let root = f32::sqrt(discriminant);
+            let root = f64::sqrt(discriminant);
             let t1 = (-b - root) / (2.0 * a);
             let t2 = (-b + root) / (2.0 * a);
 
@@ -147,33 +150,71 @@ impl Hitable for Circle {
                 normal,
                 t,
                 ray.dir.dot(normal) < 0.0,
+                self.material,
             ))
         }
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
+enum MaterialType {
+    Lambertian { albedo: Vec3 },
+    Metal { albedo: Vec3, fuzziness: f64 },
+}
+
+#[derive(Clone, Copy)]
 struct HitRecord {
     position: Vec3,
     normal: Vec3,
-    t: f32,
+    t: f64,
     front_face: bool,
+    material: MaterialType,
 }
 
 impl HitRecord {
-    fn new(position: Vec3, normal: Vec3, t: f32, front_face: bool) -> Self {
-        let normal = if front_face { normal } else { -normal };
-
+    fn new(position: Vec3, normal: Vec3, t: f64, front_face: bool, material: MaterialType) -> Self {
+        let mut normal = if front_face { normal } else { -normal };
+        normal = normal.unit();
         HitRecord {
             position,
             normal,
             t,
             front_face,
+            material,
         }
     }
 }
 trait Hitable {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
+    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
+}
+trait Material {
+    fn scatter(&self, ray: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)>;
+}
+
+impl Material for MaterialType {
+    fn scatter(&self, ray: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
+        match &self {
+            MaterialType::Lambertian { albedo } => {
+                let scatter_direction = rec.normal + random_in_hemisphere(rec.normal);
+                let scattered = Ray::new(rec.position, scatter_direction);
+                let attenuation = *albedo;
+                Some((attenuation, scattered))
+            }
+            MaterialType::Metal { albedo, fuzziness } => {
+                let reflected = reflect(ray.dir.unit(), rec.normal);
+                let scattered = Ray::new(
+                    rec.position,
+                    reflected + *fuzziness * (random_in_hemisphere(rec.normal)),
+                );
+                let attenuation = albedo;
+                if scattered.dir.dot(rec.normal) > 0.0 {
+                    Some((*attenuation, scattered))
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 fn main() {
@@ -191,12 +232,39 @@ fn main() {
         Vec3::new(4.0, 0.0, 0.0),
     );
 
-    let mut pixels: Vec<f32> = vec![];
+    let mut pixels: Vec<f64> = vec![];
 
     let mut objects: Vec<Box<dyn Hitable>> = Vec::new();
-    objects.push(Box::new(Circle::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
-    objects.push(Box::new(Circle::new(Vec3::new(-2.0, 0.0, -2.0), 0.5)));
-    objects.push(Box::new(Circle::new(Vec3::new(0.0, -100.5, -1.0), 100.0)));
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(0.0, 0.0, -1.0),
+        0.5,
+        MaterialType::Lambertian {
+            albedo: Vec3::new(0.7, 0.3, 0.3),
+        },
+    )));
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(0.0, -100.5, -1.0),
+        100.0,
+        MaterialType::Lambertian {
+            albedo: Vec3::new(0.8, 0.8, 0.0),
+        },
+    )));
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(1.0, 0.0, -1.0),
+        0.5,
+        MaterialType::Metal {
+            albedo: Vec3::new(0.8, 0.6, 0.2),
+            fuzziness: 1.0,
+        },
+    )));
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(-1.0, 0.0, -1.0),
+        0.5,
+        MaterialType::Metal {
+            albedo: Vec3::new(0.8, 0.8, 0.8),
+            fuzziness: 0.3,
+        },
+    )));
 
     println!("Start rendering");
     let start_time = Instant::now();
@@ -205,15 +273,15 @@ fn main() {
         for i in 0..image_width {
             let mut color = Vec3::new(0.0, 0.0, 0.0);
             for _ in 0..samples_per_pixel {
-                let u: f32 = ((i as f32) + random_01()) / image_width as f32;
-                let v: f32 = (((image_height - 1 - j) as f32) + random_01()) / image_height as f32;
+                let u: f64 = ((i as f64) + random_01()) / image_width as f64;
+                let v: f64 = (((image_height - 1 - j) as f64) + random_01()) / image_height as f64;
 
                 let ray = camera.get_ray(u, v);
 
                 color += ray_color(&ray, &objects, max_depth);
             }
 
-            color = color / (samples_per_pixel as f32);
+            color = color / (samples_per_pixel as f64);
 
             pixels.push(color.x);
             pixels.push(color.y);
@@ -228,7 +296,7 @@ fn main() {
     let output_pixels: Vec<u8> = pixels
         .iter()
         // Do gamma correction
-        .map(|&x| f32::sqrt(x))
+        .map(|&x| f64::sqrt(x))
         // Clamp values between 0 and 1
         .map(|x| clamp(x, 0.0, 0.9999))
         // Convert to 0 -> 256 range

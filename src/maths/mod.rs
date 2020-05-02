@@ -1,5 +1,5 @@
-mod vec3;
 mod utils;
+mod vec3;
 
-pub use vec3::*;
 pub use utils::*;
+pub use vec3::*;
