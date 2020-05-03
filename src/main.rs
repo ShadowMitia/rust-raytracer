@@ -6,6 +6,17 @@ use netpbm::*;
 
 use std::time::Instant;
 
+fn random_in_unit_disk() -> Vec3 {
+    loop {
+        let p = Vec3::new(random_between(-1.0, 1.0), random_between(-1.0, 1.0), 0.0);
+        if p.length_squared() >= 1.0 {
+            continue;
+        } else {
+            return p;
+        }
+    }
+}
+
 fn reflect(v: Vec3, n: Vec3) -> Vec3 {
     v - v.dot(n) * n * 2.0
 }
@@ -39,32 +50,32 @@ impl Ray {
     }
 }
 
-#[derive(Copy, Clone)]
-struct SimpleCamera {
-    origin: Vec3,
-    lower_left: Vec3,
-    vertical: Vec3,
-    horizontal: Vec3,
-}
+// #[derive(Copy, Clone)]
+// struct SimpleCamera {
+//     origin: Vec3,
+//     lower_left: Vec3,
+//     vertical: Vec3,
+//     horizontal: Vec3,
+// }
 
-impl SimpleCamera {
-    fn new(origin: Vec3, lower_left: Vec3, vertical: Vec3, horizontal: Vec3) -> Self {
-        SimpleCamera {
-            origin,
-            lower_left,
-            vertical,
-            horizontal,
-        }
-    }
+// impl SimpleCamera {
+//     fn new(origin: Vec3, lower_left: Vec3, vertical: Vec3, horizontal: Vec3) -> Self {
+//         SimpleCamera {
+//             origin,
+//             lower_left,
+//             vertical,
+//             horizontal,
+//         }
+//     }
 
-    fn get(self, u: f64, v: f64) -> Vec3 {
-        self.lower_left + self.horizontal * u + self.vertical * v
-    }
+//     fn get(self, u: f64, v: f64) -> Vec3 {
+//         self.lower_left + self.horizontal * u + self.vertical * v
+//     }
 
-    fn get_ray(self, u: f64, v: f64) -> Ray {
-        Ray::new(self.origin, self.get(u, v) - self.origin)
-    }
-}
+//     fn get_ray(self, u: f64, v: f64) -> Ray {
+//         Ray::new(self.origin, self.get(u, v) - self.origin)
+//     }
+// }
 
 #[derive(Copy, Clone)]
 struct Camera {
@@ -72,6 +83,10 @@ struct Camera {
     lower_left: Vec3,
     vertical: Vec3,
     horizontal: Vec3,
+    u: Vec3,
+    v: Vec3,
+    w: Vec3,
+    lens_radius: f64,
 }
 
 impl Camera {
@@ -81,8 +96,11 @@ impl Camera {
         vup: Vec3,
         vertical_fov_degrees: f64,
         aspect: f64,
+        aperture: f64,
+        focus_dist: f64,
     ) -> Self {
         let origin = lookfrom;
+        let lens_radius = aperture / 2.0;
 
         let theta = deg_to_rad(vertical_fov_degrees);
         let half_height = f64::tan(theta / 2.0);
@@ -93,30 +111,40 @@ impl Camera {
 
         let v = w.cross(u);
 
-        let lower_left = origin - half_width * u - half_height * v - w;
+        let lower_left =
+            origin 
+            - half_width  * focus_dist * u 
+            - half_height * focus_dist * v 
+            - focus_dist  * w;
 
-        let horizontal = 2.0 * half_width * u;
-        let vertical = 2.0 * half_height * v;
+        let horizontal = 2.0 * half_width * focus_dist * u;
+        let vertical = 2.0 * half_height * focus_dist * v;
 
         Camera {
             origin,
             lower_left,
             vertical,
             horizontal,
+            u,
+            v,
+            w,
+            lens_radius,
         }
     }
 
-    fn get(self, u: f64, v: f64) -> Vec3 {
-        self.lower_left + self.horizontal * u + self.vertical * v
-    }
+    fn get_ray(self, s: f64, t: f64) -> Ray {
+        let rd: Vec3 = self.lens_radius * random_in_unit_disk();
+        let offset = self.u * rd.x + self.v * rd.y;
 
-    fn get_ray(self, u: f64, v: f64) -> Ray {
-        Ray::new(self.origin, self.get(u, v) - self.origin)
+        Ray::new(
+            self.origin + offset,
+            self.lower_left + self.horizontal * s + self.vertical * t - self.origin - offset,
+        )
     }
 }
 
 fn ray_color(ray: &Ray, objects: &[Box<dyn Hitable>], depth: i32) -> Vec3 {
-    let t_min = 0.001;
+    let t_min = 0.0001;
     let t_max = std::f64::INFINITY;
 
     if depth <= 0 {
@@ -316,14 +344,21 @@ fn main() {
     let samples_per_pixel = 100;
     let max_depth = 50;
 
-    let aspect_ratio = image_width as f64/ image_height as f64;
+    let aspect_ratio = image_width as f64 / image_height as f64;
+    let lookfrom = Vec3::new(3.0, 3.0, 2.0);
+    let lookat = Vec3::new(0.0, 0.0, -1.0);
+    let vup = Vec3::new(0.0, 1.0, 0.0);
+    let dist_to_focus = (lookfrom - lookat).length();
+    let aperture = 2.0;
 
     let camera = Camera::new(
-        Vec3::new(-2.0, 2.0, 1.0),
-        Vec3::new(0.0, 0.0, -1.0),
-        Vec3::new(0.0, 1.0, 0.0),
-        90.0,
-        aspect_ratio
+        lookfrom,
+        lookat,
+        vup,
+        20.0,
+        aspect_ratio,
+        aperture,
+        dist_to_focus,
     );
 
     let mut pixels: Vec<f64> = vec![];
