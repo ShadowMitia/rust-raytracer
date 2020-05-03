@@ -112,10 +112,7 @@ impl Camera {
         let v = w.cross(u);
 
         let lower_left =
-            origin 
-            - half_width  * focus_dist * u 
-            - half_height * focus_dist * v 
-            - focus_dist  * w;
+            origin - half_width * focus_dist * u - half_height * focus_dist * v - focus_dist * w;
 
         let horizontal = 2.0 * half_width * focus_dist * u;
         let vertical = 2.0 * half_height * focus_dist * v;
@@ -336,20 +333,99 @@ impl Material for MaterialType {
     }
 }
 
+fn make_random_scene() -> Vec<Box<dyn Hitable>> {
+    let mut objects: Vec<Box<dyn Hitable>> = Vec::new();
+
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(0.0, -1000.0, 0.0),
+        1000.0,
+        MaterialType::Lambertian {
+            albedo: Vec3::new(0.5, 0.5, 0.5),
+        },
+    )));
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let choose_mat = random_01();
+
+            let center = Vec3::new(
+                a as f64 + 0.9 * random_01(),
+                0.2,
+                b as f64 + 0.9 * random_01(),
+            );
+
+            if (center - Vec3::new(4.0, 0.2, 0.0)).length() > 0.9 {
+                if choose_mat < 0.8 {
+                    // diffuse
+                    let albedo = Vec3::new(random_01(), random_01(), random_01());
+                    objects.push(Box::new(Sphere::new(
+                        center,
+                        0.2,
+                        MaterialType::Lambertian { albedo },
+                    )));
+                } else if choose_mat < 0.95 {
+                    let albedo = Vec3::new(random_between(0.5, 1.0), random_between(0.5, 1.0), 1.0);
+                    let fuzziness = random_between(0.0, 0.5);
+                    objects.push(Box::new(Sphere::new(
+                        center,
+                        0.2,
+                        MaterialType::Metal { albedo, fuzziness },
+                    )));
+                } else {
+                    objects.push(Box::new(Sphere::new(
+                        center,
+                        0.2,
+                        MaterialType::Dialectric {
+                            refractive_index: 1.5,
+                        },
+                    )));
+                }
+            }
+        }
+    }
+
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(0.0, 1.0, 0.0),
+        1.0,
+        MaterialType::Dialectric {
+            refractive_index: 1.5,
+        },
+    )));
+
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(-4.0, 1.0, 0.0),
+        1.0,
+        MaterialType::Lambertian {
+            albedo: Vec3::new(0.4, 0.2, 0.1),
+        },
+    )));
+
+    objects.push(Box::new(Sphere::new(
+        Vec3::new(4.0, 1.0, 0.0),
+        1.0,
+        MaterialType::Metal {
+            albedo: Vec3::new(0.7, 0.6, 0.5),
+            fuzziness: 0.0,
+        },
+    )));
+
+    objects
+}
+
 fn main() {
     println!("Hello, raytracer!");
 
-    let image_width = 200;
-    let image_height = 100;
+    let image_width = 1920;
+    let image_height = 1080;
     let samples_per_pixel = 100;
     let max_depth = 50;
 
     let aspect_ratio = image_width as f64 / image_height as f64;
-    let lookfrom = Vec3::new(3.0, 3.0, 2.0);
-    let lookat = Vec3::new(0.0, 0.0, -1.0);
+    let lookfrom = Vec3::new(13.0,2.0,3.0);
+    let lookat = Vec3::new(0.0, 0.0, 0.0);
     let vup = Vec3::new(0.0, 1.0, 0.0);
-    let dist_to_focus = (lookfrom - lookat).length();
-    let aperture = 2.0;
+    let dist_to_focus = 10.0;
+    let aperture = 0.1;
 
     let camera = Camera::new(
         lookfrom,
@@ -363,43 +439,45 @@ fn main() {
 
     let mut pixels: Vec<f64> = vec![];
 
-    let mut objects: Vec<Box<dyn Hitable>> = Vec::new();
-    objects.push(Box::new(Sphere::new(
-        Vec3::new(0.0, 0.0, -1.0),
-        0.5,
-        MaterialType::Lambertian {
-            albedo: Vec3::new(0.7, 0.3, 0.3),
-        },
-    )));
-    objects.push(Box::new(Sphere::new(
-        Vec3::new(0.0, -100.5, -1.0),
-        100.0,
-        MaterialType::Lambertian {
-            albedo: Vec3::new(0.8, 0.8, 0.0),
-        },
-    )));
-    objects.push(Box::new(Sphere::new(
-        Vec3::new(1.0, 0.0, -1.0),
-        0.5,
-        MaterialType::Metal {
-            albedo: Vec3::new(0.8, 0.6, 0.2),
-            fuzziness: 1.0,
-        },
-    )));
-    objects.push(Box::new(Sphere::new(
-        Vec3::new(-1.0, 0.0, -1.0),
-        0.5,
-        MaterialType::Dialectric {
-            refractive_index: 1.5,
-        },
-    )));
-    objects.push(Box::new(Sphere::new(
-        Vec3::new(-1.0, 0.0, -1.0),
-        -0.45,
-        MaterialType::Dialectric {
-            refractive_index: 1.5,
-        },
-    )));
+    let objects = make_random_scene();
+
+    // let mut objects: Vec<Box<dyn Hitable>> = Vec::new();
+    // objects.push(Box::new(Sphere::new(
+    //     Vec3::new(0.0, 0.0, -1.0),
+    //     0.5,
+    //     MaterialType::Lambertian {
+    //         albedo: Vec3::new(0.7, 0.3, 0.3),
+    //     },
+    // )));
+    // objects.push(Box::new(Sphere::new(
+    //     Vec3::new(0.0, -100.5, -1.0),
+    //     100.0,
+    //     MaterialType::Lambertian {
+    //         albedo: Vec3::new(0.8, 0.8, 0.0),
+    //     },
+    // )));
+    // objects.push(Box::new(Sphere::new(
+    //     Vec3::new(1.0, 0.0, -1.0),
+    //     0.5,
+    //     MaterialType::Metal {
+    //         albedo: Vec3::new(0.8, 0.6, 0.2),
+    //         fuzziness: 1.0,
+    //     },
+    // )));
+    // objects.push(Box::new(Sphere::new(
+    //     Vec3::new(-1.0, 0.0, -1.0),
+    //     0.5,
+    //     MaterialType::Dialectric {
+    //         refractive_index: 1.5,
+    //     },
+    // )));
+    // objects.push(Box::new(Sphere::new(
+    //     Vec3::new(-1.0, 0.0, -1.0),
+    //     -0.45,
+    //     MaterialType::Dialectric {
+    //         refractive_index: 1.5,
+    //     },
+    // )));
 
     println!("Start rendering");
     let start_time = Instant::now();
