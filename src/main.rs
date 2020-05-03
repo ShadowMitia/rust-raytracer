@@ -66,6 +66,55 @@ impl SimpleCamera {
     }
 }
 
+#[derive(Copy, Clone)]
+struct Camera {
+    origin: Vec3,
+    lower_left: Vec3,
+    vertical: Vec3,
+    horizontal: Vec3,
+}
+
+impl Camera {
+    fn new(
+        lookfrom: Vec3,
+        lookat: Vec3,
+        vup: Vec3,
+        vertical_fov_degrees: f64,
+        aspect: f64,
+    ) -> Self {
+        let origin = lookfrom;
+
+        let theta = deg_to_rad(vertical_fov_degrees);
+        let half_height = f64::tan(theta / 2.0);
+        let half_width = aspect * half_height;
+
+        let w = (lookfrom - lookat).unit();
+        let u = (vup.cross(w)).unit();
+
+        let v = w.cross(u);
+
+        let lower_left = origin - half_width * u - half_height * v - w;
+
+        let horizontal = 2.0 * half_width * u;
+        let vertical = 2.0 * half_height * v;
+
+        Camera {
+            origin,
+            lower_left,
+            vertical,
+            horizontal,
+        }
+    }
+
+    fn get(self, u: f64, v: f64) -> Vec3 {
+        self.lower_left + self.horizontal * u + self.vertical * v
+    }
+
+    fn get_ray(self, u: f64, v: f64) -> Ray {
+        Ray::new(self.origin, self.get(u, v) - self.origin)
+    }
+}
+
 fn ray_color(ray: &Ray, objects: &[Box<dyn Hitable>], depth: i32) -> Vec3 {
     let t_min = 0.001;
     let t_max = std::f64::INFINITY;
@@ -143,7 +192,6 @@ impl Hitable for Sphere {
         if discriminant < 0.0 {
             None
         } else {
-            // TODO: send both result of quadratic equation?
             let root = f64::sqrt(discriminant);
             let t1 = (-b - root) / (2.0 * a);
             let t2 = (-b + root) / (2.0 * a);
@@ -268,11 +316,14 @@ fn main() {
     let samples_per_pixel = 100;
     let max_depth = 50;
 
-    let camera = SimpleCamera::new(
-        Vec3::new(0.0, 0.0, 0.0),
-        Vec3::new(-2.0, -1.0, -1.0),
-        Vec3::new(0.0, 2.0, 0.0),
-        Vec3::new(4.0, 0.0, 0.0),
+    let aspect_ratio = image_width as f64/ image_height as f64;
+
+    let camera = Camera::new(
+        Vec3::new(-2.0, 2.0, 1.0),
+        Vec3::new(0.0, 0.0, -1.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        90.0,
+        aspect_ratio
     );
 
     let mut pixels: Vec<f64> = vec![];
