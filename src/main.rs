@@ -4,6 +4,8 @@ use maths::*;
 mod netpbm;
 use netpbm::*;
 
+use rayon::prelude::*;
+
 use std::time::Instant;
 
 fn random_in_unit_disk() -> Vec3 {
@@ -271,7 +273,8 @@ impl HitRecord {
         }
     }
 }
-trait Hitable {
+
+trait Hitable: Sync {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
 }
 trait Material {
@@ -415,8 +418,8 @@ fn make_random_scene() -> Vec<Box<dyn Hitable>> {
 fn main() {
     println!("Hello, raytracer!");
 
-    let image_width = 1920;
-    let image_height = 1080;
+    let image_width = 200;
+    let image_height = 100;
     let samples_per_pixel = 100;
     let max_depth = 50;
 
@@ -484,15 +487,15 @@ fn main() {
 
     for j in 0..image_height {
         for i in 0..image_width {
-            let mut color = Vec3::new(0.0, 0.0, 0.0);
-            for _ in 0..samples_per_pixel {
+
+            let mut color:Vec3 = (0..samples_per_pixel).into_par_iter().map(|_| {
                 let u: f64 = ((i as f64) + random_01()) / image_width as f64;
                 let v: f64 = (((image_height - 1 - j) as f64) + random_01()) / image_height as f64;
 
                 let ray = camera.get_ray(u, v);
 
-                color += ray_color(&ray, &objects, max_depth);
-            }
+                ray_color(&ray, &objects, max_depth)
+            }).sum();
 
             color = color / (samples_per_pixel as f64);
 
