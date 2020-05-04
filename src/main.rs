@@ -418,8 +418,8 @@ fn make_random_scene() -> Vec<Box<dyn Hitable>> {
 fn main() {
     println!("Hello, raytracer!");
 
-    let image_width = 200;
-    let image_height = 100;
+    let image_width = 1920;
+    let image_height = 1080;
     let samples_per_pixel = 100;
     let max_depth = 50;
 
@@ -439,8 +439,6 @@ fn main() {
         aperture,
         dist_to_focus,
     );
-
-    let mut pixels: Vec<f64> = vec![];
 
     let objects = make_random_scene();
 
@@ -485,32 +483,41 @@ fn main() {
     println!("Start rendering");
     let start_time = Instant::now();
 
-    for j in 0..image_height {
-        for i in 0..image_width {
+    let index2Dto1D =       |i:usize, j:usize, width:usize, height:usize| -> usize {
+        j * width + i
+    };
 
-            let mut color:Vec3 = (0..samples_per_pixel).into_par_iter().map(|_| {
-                let u: f64 = ((i as f64) + random_01()) / image_width as f64;
-                let v: f64 = (((image_height - 1 - j) as f64) + random_01()) / image_height as f64;
+    let index1Dto2D = |index, width, height| -> (usize, usize) {
+        (index  % width, index / width)
+    };
 
-                let ray = camera.get_ray(u, v);
 
-                ray_color(&ray, &objects, max_depth)
-            }).sum();
+    let pixels:Vec<_> = (0..image_width * image_height).into_par_iter().map(|index| {
 
-            color = color / (samples_per_pixel as f64);
+        let (i, j) = index1Dto2D(index, image_width, image_height);
 
-            pixels.push(color.x);
-            pixels.push(color.y);
-            pixels.push(color.z);
-        }
-    }
+        let mut color:Vec3 = (0..samples_per_pixel).into_par_iter().map(|_| {
+            let u: f64 = ((i as f64) + random_01()) / image_width as f64;
+            let v: f64 = (((image_height - 1 - j) as f64) + random_01()) / image_height as f64;
+
+            let ray = camera.get_ray(u, v);
+
+            ray_color(&ray, &objects, max_depth)
+        }).sum();
+
+        color = color / (samples_per_pixel as f64);
+        vec![color.x, color.y, color.z]
+    }).collect();
+
+    println!("");
 
     println!("Done! ({:?})", start_time.elapsed());
 
     println!("Generating image!");
 
     let output_pixels: Vec<u8> = pixels
-        .iter()
+    .iter()
+    .flatten()
         // Do gamma correction
         .map(|&x| f64::sqrt(x))
         // Clamp values between 0 and 1
@@ -520,5 +527,5 @@ fn main() {
         .map(|x| x as u8)
         .collect();
 
-    let _res = create_ppm("result.ppm", &output_pixels, image_width, image_height);
+    let _res = create_ppm("result.ppm", &output_pixels, image_width as u32, image_height as u32);
 }
