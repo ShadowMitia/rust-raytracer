@@ -415,6 +415,14 @@ fn make_random_scene() -> Vec<Box<dyn Hitable>> {
     objects
 }
 
+fn index_2d_to_1d(i: usize, j: usize, width: usize, _height: usize) -> usize {
+    j * width + i
+}
+
+fn index_1d_to_2d(index: usize, width: usize, _height: usize) -> (usize, usize) {
+    (index % width, index / width)
+}
+
 fn main() {
     println!("Hello, raytracer!");
 
@@ -424,7 +432,7 @@ fn main() {
     let max_depth = 50;
 
     let aspect_ratio = image_width as f64 / image_height as f64;
-    let lookfrom = Vec3::new(13.0,2.0,3.0);
+    let lookfrom = Vec3::new(13.0, 2.0, 3.0);
     let lookat = Vec3::new(0.0, 0.0, 0.0);
     let vup = Vec3::new(0.0, 1.0, 0.0);
     let dist_to_focus = 10.0;
@@ -483,41 +491,36 @@ fn main() {
     println!("Start rendering");
     let start_time = Instant::now();
 
-    let index2Dto1D =       |i:usize, j:usize, width:usize, height:usize| -> usize {
-        j * width + i
-    };
+    let pixels: Vec<_> = (0..image_width * image_height)
+        .into_par_iter()
+        .map(|index| {
+            let (i, j) = index_1d_to_2d(index, image_width, image_height);
 
-    let index1Dto2D = |index, width, height| -> (usize, usize) {
-        (index  % width, index / width)
-    };
+            let mut color: Vec3 = (0..samples_per_pixel)
+                .into_par_iter()
+                .map(|_| {
+                    let u: f64 = ((i as f64) + random_01()) / image_width as f64;
+                    let v: f64 =
+                        (((image_height - 1 - j) as f64) + random_01()) / image_height as f64;
 
+                    let ray = camera.get_ray(u, v);
 
-    let pixels:Vec<_> = (0..image_width * image_height).into_par_iter().map(|index| {
+                    ray_color(&ray, &objects, max_depth)
+                })
+                .sum();
 
-        let (i, j) = index1Dto2D(index, image_width, image_height);
-
-        let mut color:Vec3 = (0..samples_per_pixel).into_par_iter().map(|_| {
-            let u: f64 = ((i as f64) + random_01()) / image_width as f64;
-            let v: f64 = (((image_height - 1 - j) as f64) + random_01()) / image_height as f64;
-
-            let ray = camera.get_ray(u, v);
-
-            ray_color(&ray, &objects, max_depth)
-        }).sum();
-
-        color = color / (samples_per_pixel as f64);
-        vec![color.x, color.y, color.z]
-    }).collect();
-
-    println!("");
+            color = color / (samples_per_pixel as f64);
+            vec![color.x, color.y, color.z]
+        })
+        .collect();
 
     println!("Done! ({:?})", start_time.elapsed());
 
     println!("Generating image!");
 
     let output_pixels: Vec<u8> = pixels
-    .iter()
-    .flatten()
+        .iter()
+        .flatten()
         // Do gamma correction
         .map(|&x| f64::sqrt(x))
         // Clamp values between 0 and 1
@@ -527,5 +530,10 @@ fn main() {
         .map(|x| x as u8)
         .collect();
 
-    let _res = create_ppm("result.ppm", &output_pixels, image_width as u32, image_height as u32);
+    let _res = create_ppm(
+        "result.ppm",
+        &output_pixels,
+        image_width as u32,
+        image_height as u32,
+    );
 }
